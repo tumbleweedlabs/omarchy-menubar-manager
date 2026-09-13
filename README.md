@@ -44,6 +44,11 @@ APIs. The manager now obtains the widget catalog through Omarchy's supported
 read-only service injection, so the hover drawer can render its hosted
 widgets without accessing the shell's internal bar object.
 
+Version 0.2.2 also routes host/unhost operations through the companion
+service. Omarchy 4.0.3 scopes a third-party widget's config mutator to the
+`bar` object, while the drawer must atomically move entries between
+`bar.layout` and top-level `plugins[]`.
+
 To update later:
 
 ```bash

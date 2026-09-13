@@ -12,7 +12,13 @@
 // added afterward — plus our own drawer's gatedByDrawer teardown would
 // destroy/recreate Tray's live SystemTray subscriptions and open submenu
 // state on every hover-out. Not worth it.
-var EXCLUDED_WIDGET_IDS = ["omarchy.tray"]
+//
+// Pixel Shift is also structural rather than visual: it must be a real bar
+// slot so Omarchy injects the host Bar instance whose section anchors it
+// moves. Hosting it inside this drawer removes that slot, disables it in the
+// core registry, and leaves no icon to render because the widget is
+// intentionally invisible and zero-width.
+var EXCLUDED_WIDGET_IDS = ["omarchy.tray", "io.github.evindor.pixel-shift"]
 
 function entryId(entry) {
   if (typeof entry === "string") return entry

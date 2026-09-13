@@ -299,7 +299,10 @@ describe("candidateWidgets", function() {
   }
 
   test("excludes self, already-hosted, and the excluded list; sorts by display name", function() {
-    var out = m.candidateWidgets(["kc.mgr", "z.widget", "a.widget", "already", "omarchy.tray"], metadataFor, ["already"], "kc.mgr")
+    var out = m.candidateWidgets([
+      "kc.mgr", "z.widget", "a.widget", "already", "omarchy.tray",
+      "io.github.evindor.pixel-shift"
+    ], metadataFor, ["already"], "kc.mgr")
     assert.deepEqual(out.map(function(c) { return c.id }), ["a.widget", "z.widget"])
     assert.equal(out[0].displayName, "Alpha")
   })

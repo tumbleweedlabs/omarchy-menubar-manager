@@ -47,11 +47,25 @@ BarWidget {
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property var managerService: bar && bar.shell
-    && typeof bar.shell.serviceFor === "function"
-    ? bar.shell.serviceFor(moduleName) : null
+  // Service and bar-widget construction order can vary during a plugin
+  // rescan. Cache the first real service rather than binding once to null.
+  property var managerService: null
   readonly property var widgetRegistry: managerService
     ? managerService.barWidgetRegistry : null
+
+  function resolveManagerService() {
+    if (root.managerService || !root.bar || !root.bar.shell
+        || typeof root.bar.shell.serviceFor !== "function") return
+    var service = root.bar.shell.serviceFor(root.moduleName)
+    if (service) root.managerService = service
+  }
+
+  Timer {
+    interval: 100
+    repeat: true
+    running: !root.managerService
+    onTriggered: root.resolveManagerService()
+  }
 
   readonly property var hostedIds: MenubarModel.normalizeIds(settings.hosted)
   readonly property var hiddenIds: MenubarModel.normalizeIds(settings.hidden)
@@ -138,10 +152,10 @@ BarWidget {
   // host/unhost, by far the most frequent trigger — rather than only on the
   // rare occasion something actually put us somewhere else.
   Component.onCompleted: {
+    root.resolveManagerService()
     if (!root.bar || typeof root.bar.layoutEntries !== "function") return
     if (root.isPinnedAfterTray()) return
-    if (!root.bar.shell || typeof root.bar.shell.mutateShellConfig !== "function") return
-    root.bar.shell.mutateShellConfig(function(config) {
+    root.mutateFullConfig(function(config) {
       MenubarModel.pinAfterTray(config, root.moduleName)
     })
   }
@@ -195,8 +209,19 @@ BarWidget {
     persist(MenubarModel.moveHosted(hostedIds, id, direction), hiddenIds)
   }
 
+  // A third-party bar widget's shell API deliberately exposes only a scoped
+  // bar-config mutator. Hosting needs one atomic edit across both bar.layout
+  // and top-level plugins[], so the companion service owns that file-backed
+  // operation (see Service.qml).
+  function mutateFullConfig(mutator) {
+    if (!root.managerService || typeof root.managerService.mutateShellConfig !== "function") {
+      console.warn("menubar manager: full config service is unavailable")
+      return false
+    }
+    return root.managerService.mutateShellConfig(mutator)
+  }
+
   function hostWidgetById(id) {
-    if (!root.bar || !root.bar.shell || typeof root.bar.shell.mutateShellConfig !== "function") return
     // Host/un-host are structural bar.layout changes, which Bar.qml can't
     // diff against a settings-only edit — it rebuilds every module slot on
     // the bar, destroying and recreating this widget (and its open
@@ -206,13 +231,12 @@ BarWidget {
     // working" well beyond just this widget. Closing the popup first lets
     // the grab release cleanly before anything gets torn down.
     root.managePopupOpen = false
-    root.bar.shell.mutateShellConfig(function(config) {
+    root.mutateFullConfig(function(config) {
       MenubarModel.hostWidget(config, root.moduleName, id)
     })
   }
 
   function unhostWidgetById(id) {
-    if (!root.bar || !root.bar.shell || typeof root.bar.shell.mutateShellConfig !== "function") return
     root.managePopupOpen = false
     // Read-only lookup of the widget's own manifest default section. Reached
     // via bar.shell.pluginRegistry, an incidental (not documented) channel —
@@ -220,7 +244,7 @@ BarWidget {
     var registry = root.bar.shell.pluginRegistry
     var manifest = registry && registry.installedPlugins ? registry.installedPlugins[id] : null
     var section = MenubarModel.defaultSectionForManifest(manifest)
-    root.bar.shell.mutateShellConfig(function(config) {
+    root.mutateFullConfig(function(config) {
       MenubarModel.unhostWidget(config, root.moduleName, id, section)
     })
   }
@@ -248,6 +272,10 @@ BarWidget {
   function candidateWidgets() {
     if (!root.widgetRegistry) return []
     var registry = root.widgetRegistry
+    // Reading revision explicitly makes an already-open Add list refresh as
+    // the detached catalogue fills during shell startup. Calls through
+    // availableIds() alone do not establish that QML binding dependency.
+    var revision = registry.revision
     var ids = registry.availableIds()
     return MenubarModel.candidateWidgets(ids, function(id) { return registry.metadataFor(id) }, hostedIds, root.moduleName)
   }
